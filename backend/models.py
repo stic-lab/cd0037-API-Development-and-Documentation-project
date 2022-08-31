@@ -4,7 +4,9 @@ from flask_sqlalchemy import SQLAlchemy
 import json
 
 database_name = 'trivia'
-database_path = 'postgresql://{}/{}'.format('localhost:5432', database_name)
+database_user = 'postgres'
+database_password = 'postgres'
+database_path = 'postgresql://{}:{}@{}/{}'.format(database_user, database_password, 'localhost:5432', database_name)
 
 db = SQLAlchemy()
 
@@ -15,6 +17,7 @@ setup_db(app)
 def setup_db(app, database_path=database_path):
     app.config["SQLALCHEMY_DATABASE_URI"] = database_path
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    # app.config["FLASK_DEBUG"] = 1
     db.app = app
     db.init_app(app)
     db.create_all()
@@ -29,7 +32,7 @@ class Question(db.Model):
     id = Column(Integer, primary_key=True)
     question = Column(String)
     answer = Column(String)
-    category = Column(String)
+    category = Column(String , db.ForeignKey('categories.id'))
     difficulty = Column(Integer)
 
     def __init__(self, question, answer, category, difficulty):
@@ -67,6 +70,7 @@ class Category(db.Model):
 
     id = Column(Integer, primary_key=True)
     type = Column(String)
+    questions = db.relationship('Question', backref='categories', lazy=True)
 
     def __init__(self, type):
         self.type = type
