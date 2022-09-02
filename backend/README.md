@@ -168,7 +168,7 @@ The API will return three error types when requests fail:
  }
 ```
 
--Returns: a single new question object
+- Returns: a single new question object
 
 ```json
 {
