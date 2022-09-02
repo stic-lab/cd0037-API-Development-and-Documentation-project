@@ -49,25 +49,41 @@ flask run
 ```
 #### On Windows
 ```bash
-export FLASK_APP=flaskr
-export FLASK_ENV=development
+set FLASK_APP=flaskr
+set FLASK_ENV=development
 $env:FLASK_APP="flaskr"
 flask run
 ```
 
-The `--reload` flag will detect file changes and restart the server automatically.
-
 ## API Documentation
 
-You will need to provide detailed documentation of your API endpoints including the URL, request parameters, and the response body. Use the example below as a reference.
+- This section will describe how to use each endpoints endpoints. In the last section, you will find how to test those endpoints.
+- Base URL: At present this app can only be run locally and is not hosted as a base URL. The backend app is hosted at the default, `http://127.0.0.1:5000/`, which is set as proxi in the fronted configuration.
+- Authentication: This version of the application does not require authentication or API keys.
 
-### Endpoints Documentation
+### Error Handling
 
-`GET '/api/v1.0/categories'`
+Errors are returned as JSON objects in the following format:
+```json
+{
+  "success": False, 
+  "error": 404, 
+  "message": "resource not found"
+}
+```
+The API will return three error types when requests fail:
+- 400: Bad Request
+- 404: Ressource Not Found
+- 422: Not Processible
+- 405: "Method Not Allowed
+
+### Endpoints
+
+`GET '/categories'`
 
 - Fetches a dictionary of categories in which the keys are the ids and the value is the corresponding string of the category
 - Request Arguments: None
-- Returns: An object with a single key, `categories`, that contains an object of `id: category_string` key: value pairs.
+- Returns: An object with a single key, categories, that contains an object of id: category_string key:value pairs.
 
 ```json
 {
@@ -80,9 +96,139 @@ You will need to provide detailed documentation of your API endpoints including 
 }
 ```
 
-## Testing
 
-Write at least one test for the success and at least one error behavior of each endpoint using the unittest library.
+`GET '/questions?page=${integer}'`
+
+- Fetches a paginated set of questions, a total number of questions, all categories and current category string.
+- Request Arguments: `page` - integer
+- Returns: An object with 10 paginated questions, total questions, object including all categories, and current category string.
+
+```json
+{
+    "questions": [
+        {
+            "id": 1,
+            "question": "This is a question",
+            "answer": "This is an answer",
+            "difficulty": 5,
+            "category": 2
+        },
+    ],
+    "totalQuestions": 100,
+    "categories": { "1" : "Science",
+    "2" : "Art",
+    "3" : "Geography",
+    "4" : "History",
+    "5" : "Entertainment",
+    "6" : "Sports" },
+    "currentCategory": "History"
+}
+```
+
+
+`GET '/categories/${id}/questions'`
+
+- Fetches questions for a cateogry specified by id request argument.
+- Request Arguments: `id` - integer
+- Returns: An object with questions for the specified category, total questions, and current category string
+
+```json
+{
+    "questions": [
+        {
+            "id": 1,
+            "question": "This is a question",
+            "answer": "This is an answer",
+            "difficulty": 5,
+            "category": 4
+        },
+    ],
+    "totalQuestions": 100,
+    "currentCategory": "History"
+}
+```
+
+
+`DELETE '/questions/${id}'`
+
+- Deletes a specified question using the id of the question
+- Request Arguments: `id` - integer
+- Returns: Does not need to return anything besides the appropriate HTTP status code. Optionally can return the id of the question. If you are able to modify the frontend, you can have it remove the question using the id instead of refetching the questions.
+
+
+`POST '/quizzes'`
+
+- Sends a post request in order to get the next question
+- Request Body
+
+```json
+{
+    "previous_questions": [1, 4, 20, 15],
+    "quiz_category": "current category"
+ }
+```
+
+-Returns: a single new question object
+
+```json
+{
+    "question": {
+        "id": 1,
+        "question": "This is a question",
+        "answer": "This is an answer",
+        "difficulty": 5,
+        "category": 4
+    }
+}
+```
+
+
+`POST '/questions'`
+
+- Sends a post request in order to add a new question
+- Request Body:
+```json
+{
+    "question":  "Heres a new question string",
+    "answer":  "Heres a new answer string",
+    "difficulty": 1,
+    "category": 3,
+}
+```
+
+- Returns: Does not return any new data
+
+
+
+`POST '/questions'`
+
+- Sends a post request in order to search for a specific question by search term
+- Request Body:
+```json
+{
+    "searchTerm": "this is the term the user is looking for"
+}
+```
+- Returns: any array of questions, a number of totalQuestions that met the search term and the current category string
+
+```json
+{
+    "questions": [
+        {
+            "id": 1,
+            "question": "This is a question",
+            "answer": "This is an answer",
+            "difficulty": 5,
+            "category": 5
+        },
+    ],
+    "totalQuestions": 100,
+    "currentCategory": "Entertainment"
+}
+```
+
+
+## Testing
 
 To deploy the tests, run
 
