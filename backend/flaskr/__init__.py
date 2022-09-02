@@ -25,7 +25,7 @@ def create_app(test_config=None):
     # create and configure the app
     app = Flask(__name__, instance_relative_config=True)
     setup_db(app)
-    app.run(debug=True)
+    # app.run(debug=True)
 
     """
     @TODO: Set up CORS. Allow '*' for origins. Delete the sample route after completing the TODOs
@@ -81,12 +81,12 @@ def create_app(test_config=None):
     def retrieve_questions():
         selection = Question.query.order_by(Question.id).all()
         current_questions = paginate_questions(request, selection)
-        
-        categories = Category.query.order_by(Category.id).all()
-        categories_formated={categorie.format()['id']: categorie.format()['type'] for categorie in categories}
 
         if len(current_questions) == 0:
             abort(404)
+        
+        categories = Category.query.order_by(Category.id).all()
+        categories_formated={categorie.format()['id']: categorie.format()['type'] for categorie in categories}
 
         return jsonify(
             {
@@ -102,19 +102,20 @@ def create_app(test_config=None):
     @app.route("/categories/<int:category_id>/questions")
     def retrieve_questions_by_category(category_id):
         selection = Question.query.order_by(Question.id).all()
-        results =  Category.query.join(Question, Category.id == Question.category).filter( Category.id == category_id).one()
-        questions = [question.format() for question in results.questions]
+        results = Category.query.join(Question, Category.id == Question.category).filter(
+            Category.id == category_id).one_or_none()
         
 
-        if len(questions) == 0:
+        if results == None:
             abort(404)
 
+        questions = [question.format() for question in results.questions]
         return jsonify(
             {
                 "success": True,
                 "questions": questions,
                 "currentCategory": results.type,
-                "total_questions": len(selection),
+                "totalQuestions": len(selection),
             }
         )
 
@@ -126,6 +127,31 @@ def create_app(test_config=None):
     This removal will persist in the database and when you refresh the page.
     """
 
+    @app.route("/questions/<int:question_id>", methods=["DELETE"])
+    def delete_question(question_id):
+        try:
+            question = Question.query.filter(Question.id == question_id).one_or_none()
+
+            if question is None:
+                abort(404)
+
+            question.delete()
+            selection = Question.query.order_by(Question.id).all()
+            current_questions = paginate_questions(request, selection)
+
+            return jsonify(
+                {
+                    "success": True,
+                    "deleted": question_id,
+                    "questions": current_questions,
+                    "totalQuestions": len(selection),
+                }
+            )
+
+        except:
+            abort(422)
+
+
     """
     @TODO:
     Create an endpoint to POST a new question,
@@ -136,6 +162,54 @@ def create_app(test_config=None):
     the form will clear and the question will appear at the end of the last page
     of the questions list in the "List" tab.
     """
+
+    @app.route("/questions", methods=["POST"])
+    def create_question():
+        body = request.get_json()
+
+        new_question = body.get("question", None)
+        new_answer = body.get("answer", None)
+        new_difficulty = body.get("difficulty", None)
+        new_category = body.get("category", None)
+        search_term = body.get("searchTerm", None)
+
+        try:
+
+            if search_term != None:
+                selection = Question.query.order_by(Question.id).filter(
+                    Question.question.ilike("%{}%".format(search_term))
+                ).all()
+                current_questions = paginate_questions(request, selection)
+
+                return jsonify(
+                    {
+                        "success": True,
+                        "questions": current_questions,
+                        "totalQuestions": len(selection),
+                        "currentCategory": None,
+                    }
+                )
+
+            else:
+
+                question = Question(question=new_question,
+                                answer=new_answer, difficulty=new_difficulty, category=new_category)
+                question.insert()
+
+                selection = Question.query.order_by(Question.id).all()
+                current_questions = paginate_questions(request, selection)
+
+                return jsonify(
+                    {
+                        "success": True,
+                        "created": question.id,
+                        "questions": current_questions,
+                        "total_questions": len(selection),
+                    }
+                )
+
+        except:
+            abort(422)
 
     """
     @TODO:
@@ -168,6 +242,38 @@ def create_app(test_config=None):
     one question at a time is displayed, the user is allowed to answer
     and shown whether they were correct or not.
     """
+
+    @app.route("/quizzes", methods=["POST"])
+    def request_quizes():
+        body = request.get_json()
+
+        previous_questions = body.get("previous_questions", None)
+        quiz_category = body.get("quiz_category", None)
+        question = 0
+
+        try:
+            if quiz_category != None:
+
+                rand = random.randrange(0, len(Category.query.join(
+                    Question, Category.id == Question.category).filter(Category.id == quiz_category['id']).one().questions))
+
+                question = Category.query.join(Question, Category.id == Question.category).filter(
+                    Category.id == quiz_category['id']).filter(Question.id.notin_(previous_questions)).one().questions[rand]
+            else:
+                rand = random.randrange(0, Question.query.count()) 
+                question = Question.query.filter(
+                    Question.id.notin_(previous_questions)).all()[rand]
+            if question != 0:
+                return jsonify(
+                    {
+                        "success": True,
+                        "question": question.format(),
+                    }
+                )
+            else:
+                abort(404)
+        except:
+            abort(422)
 
     """
     @TODO:
