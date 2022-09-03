@@ -1,3 +1,5 @@
+from http.client import HTTPException
+from multiprocessing import AuthenticationError
 import os
 from sunau import AUDIO_FILE_ENCODING_ADPCM_G721
 from flask import Flask, request, abort, jsonify
@@ -8,18 +10,6 @@ import random
 from models import setup_db, Question, Category
 
 QUESTIONS_PER_PAGE = 10
-
-
-def paginate_questions(request, selection):
-    page = request.args.get("page", 1, type=int)
-    start = (page - 1) * QUESTIONS_PER_PAGE
-    end = start + QUESTIONS_PER_PAGE
-
-    questions = [question.format() for question in selection]
-    current_questions = questions[start:end]
-
-    return current_questions
-
 
 def create_app(test_config=None):
     # create and configure the app
@@ -51,18 +41,26 @@ def create_app(test_config=None):
     """
     @app.route("/categories", methods=['GET'])
     def retrieve_categories():
-        categories = Category.query.order_by(Category.id).all()
-        categories_formated={categorie.format()['id']: categorie.format()['type'] for categorie in categories}
+        try:
+            categories = Category.query.order_by(Category.id).all()
+            categories_formated={categorie.format()['id']: categorie.format()['type'] for categorie in categories}
 
-        if len(categories_formated) == 0:
-            abort(404)
-            
-        return jsonify(
-            {
-                "success": True,
-                "categories": categories_formated,
-            }
-        )
+            if len(categories_formated) == 0:
+                abort(404)
+                
+            return jsonify(
+                {
+                    "success": True,
+                    "categories": categories_formated,
+                }
+            )
+        except (AuthenticationError, MemoryError): # included for future use case
+            abort(422)
+        except Exception as e:
+            if e.code == 404:
+                abort(e.code)
+            else:
+                abort(422)
 
     """
     @TODO:
@@ -79,45 +77,29 @@ def create_app(test_config=None):
     
     @app.route("/questions")
     def retrieve_questions():
-        selection = Question.query.order_by(Question.id).all()
-        current_questions = paginate_questions(request, selection)
-
-        if len(current_questions) == 0:
-            abort(404)
+        try:
+            selection = Question.query.order_by(
+            Question.id).paginate(per_page=QUESTIONS_PER_PAGE).items
         
-        categories = Category.query.order_by(Category.id).all()
-        categories_formated={categorie.format()['id']: categorie.format()['type'] for categorie in categories}
+            current_questions = [question.format() for question in selection]
+            categories = Category.query.order_by(Category.id).all()
+            categories_formated={categorie.format()['id']: categorie.format()['type'] for categorie in categories}
 
-        return jsonify(
-            {
-                "success": True,
-                "questions": current_questions,
-                "categories": categories_formated,
-                "currentCategory": None,
-                "total_questions": len(selection),
-            }
-        )
+            return jsonify(
+                {
+                    "success": True,
+                    "questions": current_questions,
+                    "categories": categories_formated,
+                    "currentCategory": None,
+                    "total_questions": len(Question.query.order_by(Question.id).all()),
+                }
+            )
+        except (AuthenticationError, MemoryError, TypeError):  # included for future use case
+            abort(422)
+        except Exception:
+            abort(422)
 
     
-    @app.route("/categories/<int:category_id>/questions")
-    def retrieve_questions_by_category(category_id):
-        selection = Question.query.order_by(Question.id).all()
-        results = Category.query.join(Question, Category.id == Question.category).filter(
-            Category.id == category_id).one_or_none()
-        
-
-        if results == None:
-            abort(404)
-
-        questions = [question.format() for question in results.questions]
-        return jsonify(
-            {
-                "success": True,
-                "questions": questions,
-                "currentCategory": results.type,
-                "totalQuestions": len(selection),
-            }
-        )
 
     """
     @TODO:
@@ -136,20 +118,29 @@ def create_app(test_config=None):
                 abort(404)
 
             question.delete()
-            selection = Question.query.order_by(Question.id).all()
-            current_questions = paginate_questions(request, selection)
+            
+
+            selection = Question.query.order_by(
+                Question.id).paginate(per_page=QUESTIONS_PER_PAGE).items
+
+            current_questions = [question.format() for question in selection]
 
             return jsonify(
                 {
                     "success": True,
                     "deleted": question_id,
                     "questions": current_questions,
-                    "totalQuestions": len(selection),
+                    "totalQuestions": len(Question.query.order_by(Question.id).all()),
                 }
             )
 
-        except:
+        except (AuthenticationError, MemoryError, TypeError):  # included for future use case
             abort(422)
+        except Exception as e:
+            if e.code == 404:
+                abort(e.code)
+            else:
+                abort(422)
 
 
     """
@@ -165,21 +156,25 @@ def create_app(test_config=None):
 
     @app.route("/questions", methods=["POST"])
     def create_question():
-        body = request.get_json()
-
-        new_question = body.get("question", None)
-        new_answer = body.get("answer", None)
-        new_difficulty = body.get("difficulty", None)
-        new_category = body.get("category", None)
-        search_term = body.get("searchTerm", None)
-
+        new_question = ""
+        new_answer = ""
+        new_difficulty = None
+        new_category = None
+        search_term = None
         try:
-
-            if search_term != None:
+            body = request.get_json()
+            search_term = body.get("searchTerm", None)
+            body = request.get_json()
+            new_question = body.get("question", "")
+            new_answer = body.get("answer", "")
+            new_difficulty = body.get("difficulty", None)
+            new_category = body.get("category", None)
+            if search_term:
                 selection = Question.query.order_by(Question.id).filter(
                     Question.question.ilike("%{}%".format(search_term))
-                ).all()
-                current_questions = paginate_questions(request, selection)
+                ).paginate(per_page=QUESTIONS_PER_PAGE).items
+                current_questions = [question.format()
+                                    for question in selection]
 
                 return jsonify(
                     {
@@ -192,23 +187,46 @@ def create_app(test_config=None):
 
             else:
 
+                # User Input handling
+                if new_question.isspace() or new_answer.isspace() or new_question == "" or new_answer == "":
+                    print("Hello deux")
+                    raise AttributeError(
+                        "Sorry, question, answer, category, and difficulty should not be empty")
+
+                if not isinstance(new_difficulty, int):
+                    print("exception raise two")
+                    raise TypeError("Sorry, difficulty should be an integer")
+                if new_difficulty not in range(1, 6):
+                    print("exception raise two")
+                    raise TypeError("Sorry, difficulty should be an integer between 1 and 5")
+
+                if not isinstance(new_category, int):
+                    abort(422)
+
+                category = Category.query.filter(Category.id == new_category).all()
+                if len(category) == 0:
+                    abort(422)
+
                 question = Question(question=new_question,
                                 answer=new_answer, difficulty=new_difficulty, category=new_category)
                 question.insert()
-
-                selection = Question.query.order_by(Question.id).all()
-                current_questions = paginate_questions(request, selection)
+                selection = Question.query.order_by(Question.id).paginate(
+                    per_page=QUESTIONS_PER_PAGE).items
+                current_questions = [question.format()
+                                        for question in selection]
 
                 return jsonify(
                     {
                         "success": True,
                         "created": question.id,
                         "questions": current_questions,
-                        "total_questions": len(selection),
+                        "total_questions": len(Question.query.order_by(Question.id).all()),
                     }
                 )
 
-        except:
+        except (AuthenticationError, MemoryError, TypeError):  # included for future use case
+            abort(422)
+        except Exception:
             abort(422)
 
     """
@@ -222,6 +240,31 @@ def create_app(test_config=None):
     Try using the word "title" to start.
     """
 
+    # @app.route("/questions/search", methods=["POST"])
+    # def search_question():
+    #     try:
+    #         body = request.get_json()
+    #         search_term = body.get("searchTerm", None)
+    #         selection = Question.query.order_by(Question.id).filter(
+    #             Question.question.ilike("%{}%".format(search_term))
+    #         ).paginate(per_page=QUESTIONS_PER_PAGE).items
+    #         current_questions = [question.format()
+    #                                 for question in selection]
+
+    #         return jsonify(
+    #             {
+    #                 "success": True,
+    #                 "questions": current_questions,
+    #                 "totalQuestions": len(selection),
+    #                 "currentCategory": None,
+    #             }
+    #         )
+
+    #     except (AuthenticationError, MemoryError, TypeError):  # included for future use case
+    #         abort(422)
+    #     except Exception:
+    #         abort(422)
+
     """
     @TODO:
     Create a GET endpoint to get questions based on category.
@@ -230,6 +273,33 @@ def create_app(test_config=None):
     categories in the left column will cause only questions of that
     category to be shown.
     """
+    @app.route("/categories/<int:category_id>/questions", methods=["GET"])
+    def retrieve_questions_by_category(category_id):
+        questions = list()
+        try:
+            questions = Question.query.join(Category, Question.category == Category.id).filter(
+                Category.id == category_id).all()
+
+            if not questions:
+                abort(404)
+
+            questions = [question.format() for question in questions]
+            return jsonify(
+                {
+                    "success": True,
+                    "questions": questions,
+                    "currentCategory": category_id,
+                    "totalQuestions": len(Question.query.order_by(Question.id).all()),
+                }
+            )
+
+        except (AuthenticationError, MemoryError, TypeError):  # included for future use case
+            abort(422)
+        except Exception as e:
+            if e.code == 404:
+                abort(e.code)
+            else:
+                abort(422)
 
     """
     @TODO:
@@ -245,13 +315,12 @@ def create_app(test_config=None):
 
     @app.route("/quizzes", methods=["POST"])
     def request_quizes():
-        body = request.get_json()
-
-        previous_questions = body.get("previous_questions", None)
-        quiz_category = body.get("quiz_category", None)
-        question = 0
 
         try:
+            body = request.get_json()
+            previous_questions = body.get("previous_questions", None)
+            quiz_category = body.get("quiz_category", None)
+            question = 0
             if quiz_category != None:
 
                 rand = random.randrange(0, len(Category.query.join(
@@ -272,8 +341,14 @@ def create_app(test_config=None):
                 )
             else:
                 abort(404)
-        except:
+
+        except (AuthenticationError, MemoryError, TypeError):  # included for future use case
             abort(422)
+        except Exception as e:
+            if e.code == 404:
+                abort(e.code)
+            else:
+                abort(422)
 
     """
     @TODO:

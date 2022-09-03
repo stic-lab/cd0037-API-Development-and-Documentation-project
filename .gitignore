@@ -15,3 +15,4 @@ venv/
 .vscode
 env/
 frontend/node_modules/
+backend/.env

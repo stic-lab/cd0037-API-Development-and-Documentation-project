@@ -164,7 +164,10 @@ The API will return three error types when requests fail:
 ```json
 {
     "previous_questions": [1, 4, 20, 15],
-    "quiz_category": "current category"
+    "quiz_category": {
+        "id": 1,
+        "type": "Science"
+    }
  }
 ```
 
@@ -200,7 +203,7 @@ The API will return three error types when requests fail:
 
 
 
-`POST '/questions'`
+`POST '/questions/search'`
 
 - Sends a post request in order to search for a specific question by search term
 - Request Body:
