@@ -40,6 +40,14 @@ psql trivia < trivia.psql
 
 From within the `backend` directory first ensure you are working using your created virtual environment.
 
+Yous should create `.env` file which should contain database configuration. Se below for an example that should be putted in the `.env` file.
+
+````bash
+DATABASE_NAME='database_name'
+DATABASE_NAME_TEST='database_test_name'
+DATABASE_USER='user'
+DATABASE_PASSWORD='password'
+````
 To run the server, execute one by one these command below:
 #### On linux or mac
 ```bash
