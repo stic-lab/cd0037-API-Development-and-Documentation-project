@@ -203,7 +203,7 @@ The API will return three error types when requests fail:
 
 
 
-`POST '/questions/search'`
+`POST '/questions'`
 
 - Sends a post request in order to search for a specific question by search term
 - Request Body:
